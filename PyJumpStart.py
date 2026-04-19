@@ -1,21 +1,55 @@
 import argparse
+import ctypes
 import json
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
+
+
+def _enable_windows_vt() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32
+        STD_OUTPUT_HANDLE = -11
+        ENABLE_PROCESSED_OUTPUT = 0x0001
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+        handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+        mode = ctypes.c_ulong()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(
+                handle,
+                mode.value | ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+            )
+    except Exception:
+        pass
+
+
+_enable_windows_vt()
+os.environ.setdefault("PROMPT_TOOLKIT_COLOR_DEPTH", "DEPTH_24_BIT")
 
 from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout.containers import HSplit, Window, ConditionalContainer
+from prompt_toolkit.layout.containers import HSplit, Window
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
+from prompt_toolkit.output import ColorDepth, create_output
 from prompt_toolkit.styles import Style
 
-PROJECTS_DIR = Path(r"C:\Users\mauri\Documents\python cprojects")
+_OUTPUT = create_output(always_prefer_tty=True)
+
+
+def make_app(**kwargs) -> Application:
+    kwargs.setdefault("full_screen", False)
+    kwargs.setdefault("style", STYLE)
+    kwargs.setdefault("color_depth", ColorDepth.TRUE_COLOR)
+    kwargs.setdefault("output", _OUTPUT)
+    return Application(**kwargs)
+
+PROJECTS_DIR = Path(r"C:\Users\Mauri\Documents\Python Projects")
 HISTORY_FILE = Path.home() / ".pyjumpstart_history.json"
 
 STYLE = Style.from_dict({
@@ -67,7 +101,7 @@ def open_terminal(project_name: str) -> None:
 def open_cursor(project_name: str) -> None:
     path = PROJECTS_DIR / project_name
     save_history(project_name)
-    os.system(f'start cmd /K "cd /d {path} && cursor ."')
+    os.system(f'start cmd /K "cd /d {path} && cursor . 2>nul"')
 
 
 def action_menu(project_name: str) -> None:
@@ -106,11 +140,9 @@ def action_menu(project_name: str) -> None:
             ("class:project", "    [Esc] Back\n"),
         ]
     )
-    app: Application[None] = Application(
+    app = make_app(
         layout=Layout(Window(body)),
         key_bindings=kb,
-        style=STYLE,
-        full_screen=False,
     )
     app.run()
 
@@ -122,44 +154,6 @@ def action_menu(project_name: str) -> None:
         sys.exit(0)
     elif result == "quit":
         sys.exit(0)
-
-
-def new_project_type_prompt() -> str | None:
-    """Returns 'blank', 'git', or None (cancelled)."""
-    kb = KeyBindings()
-    result: list[str] = []
-
-    @kb.add("b")
-    def _blank(event):
-        result.append("blank")
-        event.app.exit()
-
-    @kb.add("g")
-    def _git(event):
-        result.append("git")
-        event.app.exit()
-
-    @kb.add("escape")
-    @kb.add("c-c")
-    def _cancel(event):
-        event.app.exit()
-
-    body = FormattedTextControl([
-        ("class:header", "\n  New Project\n\n"),
-        ("class:project", "    [b] "),
-        ("class:status", "Blank folder\n"),
-        ("class:project", "    [g] "),
-        ("class:status", "Clone from GitHub\n\n"),
-        ("class:project", "    [Esc] Back\n"),
-    ])
-    app: Application[None] = Application(
-        layout=Layout(Window(body)),
-        key_bindings=kb,
-        style=STYLE,
-        full_screen=False,
-    )
-    app.run()
-    return result[0] if result else None
 
 
 def text_input_prompt(label: str) -> str | None:
@@ -177,7 +171,7 @@ def text_input_prompt(label: str) -> str | None:
     def _cancel(event):
         event.app.exit()
 
-    app: Application[None] = Application(
+    app = make_app(
         layout=Layout(
             HSplit([
                 Window(FormattedTextControl([("class:header", f"\n  {label}")]), height=2),
@@ -185,34 +179,12 @@ def text_input_prompt(label: str) -> str | None:
             ])
         ),
         key_bindings=kb,
-        style=STYLE,
-        full_screen=False,
     )
     app.run()
 
     if confirmed and buf.text.strip():
         return buf.text.strip()
     return None
-
-
-def clone_repo(url: str) -> tuple[bool, str]:
-    repo_name = url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
-    dest = PROJECTS_DIR / repo_name
-    if dest.exists():
-        return False, f"Folder '{repo_name}' already exists"
-    try:
-        subprocess.run(
-            ["git", "clone", url, str(dest)],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return True, repo_name
-    except FileNotFoundError:
-        return False, "git is not installed or not on PATH"
-    except subprocess.CalledProcessError as e:
-        msg = e.stderr.strip().split("\n")[-1] if e.stderr else "Clone failed"
-        return False, msg
 
 
 def confirm_delete(project_name: str) -> bool:
@@ -236,11 +208,9 @@ def confirm_delete(project_name: str) -> bool:
     body = FormattedTextControl([
         ("class:error", f"\n  Delete '{project_name}' permanently? [y/n] "),
     ])
-    app: Application[None] = Application(
+    app = make_app(
         layout=Layout(Window(body)),
         key_bindings=kb,
-        style=STYLE,
-        full_screen=False,
     )
     app.run()
     return result[0]
@@ -290,8 +260,6 @@ def main_menu() -> None:
 
     header_window = Window(FormattedTextControl(get_header_text), height=4)
     list_window = Window(FormattedTextControl(get_project_list_text), height=15)
-    filter_label = Window(FormattedTextControl([("class:prompt", "  Filter: ")]), height=1, width=10)
-    filter_window = Window(BufferControl(buffer=filter_buf), height=1)
     footer_window = Window(FormattedTextControl(get_footer_text), height=3)
 
     kb = KeyBindings()
@@ -350,11 +318,9 @@ def main_menu() -> None:
         filter_buf.text = ""
         status_text.clear()
 
-        app: Application[str | None] = Application(
+        app = make_app(
             layout=layout,
             key_bindings=kb,
-            style=STYLE,
-            full_screen=False,
         )
 
         try:
@@ -369,24 +335,14 @@ def main_menu() -> None:
             return
 
         if result == "__NEW__":
-            choice = new_project_type_prompt()
-            if choice == "blank":
-                name = text_input_prompt("Project name: ")
-                if name:
-                    new_path = PROJECTS_DIR / name
-                    try:
-                        new_path.mkdir(parents=True, exist_ok=True)
-                        status_text.append(("class:status", f"\n  Created: {name}\n"))
-                    except PermissionError:
-                        status_text.append(("class:error", f"\n  Permission denied creating '{name}'\n"))
-            elif choice == "git":
-                url = text_input_prompt("Repo URL: ")
-                if url:
-                    ok, msg = clone_repo(url)
-                    if ok:
-                        status_text.append(("class:status", f"\n  Cloned: {msg}\n"))
-                    else:
-                        status_text.append(("class:error", f"\n  {msg}\n"))
+            name = text_input_prompt("Project name: ")
+            if name:
+                new_path = PROJECTS_DIR / name
+                try:
+                    new_path.mkdir(parents=True, exist_ok=True)
+                    status_text.append(("class:status", f"\n  Created: {name}\n"))
+                except PermissionError:
+                    status_text.append(("class:error", f"\n  Permission denied creating '{name}'\n"))
             continue
 
         if result == "__DELETE__":
@@ -427,4 +383,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"\n  ERROR: {e}")
+        input("\n  Press Enter to close...")

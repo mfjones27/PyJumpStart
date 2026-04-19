@@ -1,0 +1,46 @@
+# >>> GitTool managed ignores >>>
+# Auto-managed by GitTool. Edits inside this block may be overwritten.
+# Add your own patterns outside this block.
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+*.log
+logs/
+dist/
+build/
+out/
+*.exe
+*.msi
+*.dmg
+*.app
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+*.egg
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+pip-log.txt
+pip-delete-this-directory.txt
+# <<< GitTool managed ignores <<<
