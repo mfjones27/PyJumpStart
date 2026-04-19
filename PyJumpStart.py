@@ -3,6 +3,7 @@ import ctypes
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -216,12 +217,181 @@ def confirm_delete(project_name: str) -> bool:
     return result[0]
 
 
+def list_github_repos() -> tuple[list[tuple[str, str]], str | None]:
+    """Return (repos, error). repos is list of (nameWithOwner, url)."""
+    try:
+        proc = subprocess.run(
+            ["gh", "repo", "list", "--limit", "500", "--json", "nameWithOwner,url"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return [], "GitHub CLI (gh) not installed. Install from https://cli.github.com"
+    if proc.returncode != 0:
+        msg = (proc.stderr or "gh failed").strip().splitlines()[-1]
+        if "auth" in msg.lower() or "logged in" in msg.lower():
+            msg = "gh not authenticated. Run: gh auth login"
+        return [], msg
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return [], "Failed to parse gh output"
+    repos = sorted(
+        [(r["nameWithOwner"], r["url"]) for r in data],
+        key=lambda x: x[0].lower(),
+    )
+    return repos, None
+
+
+def clone_repo(url: str, use_gh: bool = False) -> tuple[bool, str]:
+    repo_name = url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
+    dest = PROJECTS_DIR / repo_name
+    if dest.exists():
+        return False, f"Folder '{repo_name}' already exists"
+    cmd = ["gh", "repo", "clone", url, str(dest)] if use_gh else ["git", "clone", url, str(dest)]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return True, repo_name
+    except FileNotFoundError:
+        tool = "gh" if use_gh else "git"
+        return False, f"{tool} is not installed or not on PATH"
+    except subprocess.CalledProcessError as e:
+        msg = (e.stderr or "").strip().splitlines()
+        return False, msg[-1] if msg else "Clone failed"
+
+
+def pick_from_list(items: list[str], title: str) -> str | None:
+    if not items:
+        return None
+    selected_index = [0]
+    filter_buf = Buffer(name="pick_filter")
+    view_height = 15
+    view_offset = [0]
+
+    def get_filtered() -> list[str]:
+        q = filter_buf.text
+        if not q:
+            return items
+        return [x for x in items if fuzzy_match(q, x)]
+
+    def ensure_visible():
+        filtered = get_filtered()
+        if not filtered:
+            return
+        sel = selected_index[0] % len(filtered)
+        if sel < view_offset[0]:
+            view_offset[0] = sel
+        elif sel >= view_offset[0] + view_height:
+            view_offset[0] = sel - view_height + 1
+
+    def get_list_text():
+        filtered = get_filtered()
+        if not filtered:
+            return [("class:status", "  No matches.\n")]
+        ensure_visible()
+        sel = selected_index[0] % len(filtered)
+        lines: list[tuple[str, str]] = []
+        start = view_offset[0]
+        end = min(start + view_height, len(filtered))
+        for i in range(start, end):
+            marker = " ▸ " if i == sel else "   "
+            cls = "class:project.selected" if i == sel else "class:project"
+            lines.append((cls, f"{marker}{filtered[i]}\n"))
+        if len(filtered) > view_height:
+            lines.append(("class:status", f"\n  {sel + 1}/{len(filtered)}\n"))
+        return lines
+
+    kb = KeyBindings()
+
+    @kb.add("up")
+    def _up(event):
+        filtered = get_filtered()
+        if filtered:
+            selected_index[0] = (selected_index[0] - 1) % len(filtered)
+
+    @kb.add("down")
+    def _down(event):
+        filtered = get_filtered()
+        if filtered:
+            selected_index[0] = (selected_index[0] + 1) % len(filtered)
+
+    @kb.add("enter")
+    def _select(event):
+        filtered = get_filtered()
+        if filtered:
+            sel = selected_index[0] % len(filtered)
+            event.app.exit(result=filtered[sel])
+
+    @kb.add("escape")
+    @kb.add("c-c")
+    def _cancel(event):
+        event.app.exit()
+
+    def on_text_changed(_buf):
+        selected_index[0] = 0
+        view_offset[0] = 0
+
+    filter_buf.on_text_changed += on_text_changed
+
+    layout = Layout(
+        HSplit([
+            Window(FormattedTextControl([("class:header", f"\n  {title}\n")]), height=2),
+            Window(FormattedTextControl([("class:prompt", "  Filter: ")]), height=1),
+            Window(BufferControl(buffer=filter_buf), height=1),
+            Window(FormattedTextControl([("", "\n")]), height=1),
+            Window(FormattedTextControl(get_list_text), height=view_height + 2),
+            Window(FormattedTextControl([("class:status", "\n  [↑↓] Navigate  [Enter] Select  [Esc] Back\n")]), height=2),
+        ])
+    )
+
+    app = make_app(layout=layout, key_bindings=kb)
+    return app.run()
+
+
+def clone_source_prompt() -> str | None:
+    """Returns 'mine', 'url', or None."""
+    kb = KeyBindings()
+    result: list[str] = []
+
+    @kb.add("m")
+    def _mine(event):
+        result.append("mine")
+        event.app.exit()
+
+    @kb.add("u")
+    def _url(event):
+        result.append("url")
+        event.app.exit()
+
+    @kb.add("escape")
+    @kb.add("c-c")
+    def _cancel(event):
+        event.app.exit()
+
+    body = FormattedTextControl([
+        ("class:header", "\n  Clone Repository\n\n"),
+        ("class:project", "    [m] "),
+        ("class:status", "My GitHub repos\n"),
+        ("class:project", "    [u] "),
+        ("class:status", "Paste a URL\n\n"),
+        ("class:project", "    [Esc] Back\n"),
+    ])
+    app = make_app(layout=Layout(Window(body)), key_bindings=kb)
+    app.run()
+    return result[0] if result else None
+
+
 def main_menu() -> None:
     projects = get_projects()
     selected_index = [0]
     filter_buf = Buffer(name="filter")
     status_text: list[tuple[str, str]] = []
     force_quit = [False]
+
+    def set_status(style: str, text: str) -> None:
+        status_text.clear()
+        status_text.append((style, text))
 
     def get_filtered() -> list[str]:
         query = filter_buf.text
@@ -252,7 +422,7 @@ def main_menu() -> None:
 
     def get_footer_text():
         parts: list[tuple[str, str]] = [
-            ("class:status", "\n  [↑↓] Navigate  [Enter] Select  [n] New  [d] Delete  [Ctrl+C] Quit\n"),
+            ("class:status", "\n  [↑↓] Navigate  [Enter] Select  [n] New  [g] Clone  [d] Delete  [Ctrl+C] Quit\n"),
         ]
         if status_text:
             parts.append(status_text[0])
@@ -260,7 +430,7 @@ def main_menu() -> None:
 
     header_window = Window(FormattedTextControl(get_header_text), height=4)
     list_window = Window(FormattedTextControl(get_project_list_text), height=15)
-    footer_window = Window(FormattedTextControl(get_footer_text), height=3)
+    footer_window = Window(FormattedTextControl(get_footer_text), height=5)
 
     kb = KeyBindings()
 
@@ -292,6 +462,10 @@ def main_menu() -> None:
     def _new(event):
         event.app.exit(result="__NEW__")
 
+    @kb.add("g", filter=Condition(lambda: filter_buf.text == ""))
+    def _clone(event):
+        event.app.exit(result="__CLONE__")
+
     @kb.add("d")
     def _delete(event):
         event.app.exit(result="__DELETE__")
@@ -316,7 +490,6 @@ def main_menu() -> None:
         projects = get_projects()
         selected_index[0] = 0
         filter_buf.text = ""
-        status_text.clear()
 
         app = make_app(
             layout=layout,
@@ -340,9 +513,36 @@ def main_menu() -> None:
                 new_path = PROJECTS_DIR / name
                 try:
                     new_path.mkdir(parents=True, exist_ok=True)
-                    status_text.append(("class:status", f"\n  Created: {name}\n"))
+                    set_status("class:status", f"\n  Created: {name}\n")
                 except PermissionError:
-                    status_text.append(("class:error", f"\n  Permission denied creating '{name}'\n"))
+                    set_status("class:error", f"\n  Permission denied creating '{name}'\n")
+            continue
+
+        if result == "__CLONE__":
+            choice = clone_source_prompt()
+            if choice == "mine":
+                repos, err = list_github_repos()
+                if err:
+                    set_status("class:error", f"\n  {err}\n")
+                elif not repos:
+                    set_status("class:status", "\n  No repos found for your account\n")
+                else:
+                    labels = [name for name, _ in repos]
+                    picked = pick_from_list(labels, "Select a repo to clone")
+                    if picked:
+                        ok, msg = clone_repo(picked, use_gh=True)
+                        if ok:
+                            set_status("class:status", f"\n  Cloned: {msg}\n")
+                        else:
+                            set_status("class:error", f"\n  {msg}\n")
+            elif choice == "url":
+                url = text_input_prompt("Repo URL: ")
+                if url:
+                    ok, msg = clone_repo(url)
+                    if ok:
+                        set_status("class:status", f"\n  Cloned: {msg}\n")
+                    else:
+                        set_status("class:error", f"\n  {msg}\n")
             continue
 
         if result == "__DELETE__":
@@ -353,9 +553,9 @@ def main_menu() -> None:
                 if confirm_delete(target):
                     try:
                         shutil.rmtree(PROJECTS_DIR / target)
-                        status_text.append(("class:status", f"\n  Deleted: {target}\n"))
+                        set_status("class:status", f"\n  Deleted: {target}\n")
                     except PermissionError:
-                        status_text.append(("class:error", f"\n  Permission denied deleting '{target}'\n"))
+                        set_status("class:error", f"\n  Permission denied deleting '{target}'\n")
             continue
 
         action_menu(result)

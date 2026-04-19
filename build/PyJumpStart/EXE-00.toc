@@ -79,7 +79,7 @@
  [],
  False,
  False,
- 1776563454,
+ 1776565881,
  [('run.exe',
    'C:\\Users\\Mauri\\Documents\\Python '
    'Projects\\JumpStart\\venv\\Lib\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\run.exe',
