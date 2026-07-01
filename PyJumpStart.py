@@ -32,7 +32,6 @@ os.environ.setdefault("PROMPT_TOOLKIT_COLOR_DEPTH", "DEPTH_24_BIT")
 
 from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout.containers import HSplit, Window
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
@@ -50,7 +49,11 @@ def make_app(**kwargs) -> Application:
     kwargs.setdefault("output", _OUTPUT)
     return Application(**kwargs)
 
-PROJECTS_DIR = Path(r"C:\Users\Mauri\Documents\Python Projects")
+DOCUMENTS_DIR = Path.home() / "Documents"
+PROJECTS_DIR = next(
+    (d for d in DOCUMENTS_DIR.iterdir() if d.is_dir() and "Python" in d.name),
+    DOCUMENTS_DIR,  # fallback if not found
+)
 HISTORY_FILE = Path.home() / ".pyjumpstart_history.json"
 
 STYLE = Style.from_dict({
@@ -388,6 +391,8 @@ def main_menu() -> None:
     filter_buf = Buffer(name="filter")
     status_text: list[tuple[str, str]] = []
     force_quit = [False]
+    view_height = 15
+    view_offset = [0]
 
     def set_status(style: str, text: str) -> None:
         status_text.clear()
@@ -399,6 +404,16 @@ def main_menu() -> None:
             return projects
         return [p for p in projects if fuzzy_match(query, p)]
 
+    def ensure_visible():
+        filtered = get_filtered()
+        if not filtered:
+            return
+        sel = selected_index[0] % len(filtered)
+        if sel < view_offset[0]:
+            view_offset[0] = sel
+        elif sel >= view_offset[0] + view_height:
+            view_offset[0] = sel - view_height + 1
+
     def get_header_text():
         return [
             ("class:header", "  ╔══════════════════════════════════════╗\n"),
@@ -409,28 +424,37 @@ def main_menu() -> None:
     def get_project_list_text():
         filtered = get_filtered()
         if not filtered and not filter_buf.text:
-            return [("class:status", "  No projects found. Press [n] to create one.\n")]
+            return [("class:status", "  No projects found. Press [Ctrl+N] to create one.\n")]
         if not filtered:
             return [("class:status", "  No matches.\n")]
+        ensure_visible()
+        sel = selected_index[0] % len(filtered)
         lines: list[tuple[str, str]] = []
-        sel = selected_index[0] % len(filtered) if filtered else 0
-        for i, name in enumerate(filtered):
+        start = view_offset[0]
+        end = min(start + view_height, len(filtered))
+        for i in range(start, end):
+            name = filtered[i]
             marker = " ▸ " if i == sel else "   "
             cls = "class:project.selected" if i == sel else "class:project"
             lines.append((cls, f"{marker}{name}\n"))
         return lines
 
     def get_footer_text():
-        parts: list[tuple[str, str]] = [
-            ("class:status", "\n  [↑↓] Navigate  [Enter] Select  [n] New  [g] Clone  [d] Delete  [Ctrl+C] Quit\n"),
-        ]
+        parts: list[tuple[str, str]] = []
+        filtered = get_filtered()
+        if filtered and len(filtered) > view_height:
+            sel = selected_index[0] % len(filtered)
+            parts.append(("class:status", f"  {sel + 1}/{len(filtered)}\n"))
+        parts.append(
+            ("class:status", "\n  [↑↓] Navigate  [Enter] Select  [Ctrl+N] New  [Ctrl+G] Clone  [Ctrl+D] Delete  [Ctrl+C] Quit\n"),
+        )
         if status_text:
             parts.append(status_text[0])
         return parts
 
     header_window = Window(FormattedTextControl(get_header_text), height=4)
-    list_window = Window(FormattedTextControl(get_project_list_text), height=15)
-    footer_window = Window(FormattedTextControl(get_footer_text), height=5)
+    list_window = Window(FormattedTextControl(get_project_list_text), height=view_height)
+    footer_window = Window(FormattedTextControl(get_footer_text), height=6)
 
     kb = KeyBindings()
 
@@ -458,20 +482,21 @@ def main_menu() -> None:
         force_quit[0] = True
         event.app.exit()
 
-    @kb.add("n", filter=Condition(lambda: filter_buf.text == ""))
+    @kb.add("c-n")
     def _new(event):
         event.app.exit(result="__NEW__")
 
-    @kb.add("g", filter=Condition(lambda: filter_buf.text == ""))
+    @kb.add("c-g")
     def _clone(event):
         event.app.exit(result="__CLONE__")
 
-    @kb.add("d")
+    @kb.add("c-d")
     def _delete(event):
         event.app.exit(result="__DELETE__")
 
     def on_text_changed(_buf):
         selected_index[0] = 0
+        view_offset[0] = 0
 
     filter_buf.on_text_changed += on_text_changed
 
@@ -488,8 +513,11 @@ def main_menu() -> None:
 
     while True:
         projects = get_projects()
-        selected_index[0] = 0
         filter_buf.text = ""
+        last = load_history().get("last")
+        selected_index[0] = projects.index(last) if last in projects else 0
+        view_offset[0] = 0
+        ensure_visible()
 
         app = make_app(
             layout=layout,

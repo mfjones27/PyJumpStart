@@ -1,5 +1,4 @@
-('C:\\Users\\Mauri\\Documents\\Python '
- 'Projects\\JumpStart\\build\\PyJumpStart\\PyJumpStart.pkg',
+('C:\\Users\\majones\\Documents\\Python_Projects\\PyJumpStart\\build\\pyjumpstart\\PyJumpStart.pkg',
  {'BINARY': True,
   'DATA': True,
   'EXECUTABLE': True,
@@ -11,49 +10,39 @@
   'SYMLINK': False},
  [('pyi-contents-directory _internal', '', 'OPTION'),
   ('PYZ-00.pyz',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\build\\PyJumpStart\\PYZ-00.pyz',
+   'C:\\Users\\majones\\Documents\\Python_Projects\\PyJumpStart\\build\\pyjumpstart\\PYZ-00.pyz',
    'PYZ'),
   ('struct',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\build\\PyJumpStart\\localpycs\\struct.pyc',
+   'C:\\Users\\majones\\Documents\\Python_Projects\\PyJumpStart\\build\\pyjumpstart\\localpycs\\struct.pyc',
    'PYMODULE'),
   ('pyimod01_archive',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\build\\PyJumpStart\\localpycs\\pyimod01_archive.pyc',
+   'C:\\Users\\majones\\Documents\\Python_Projects\\PyJumpStart\\build\\pyjumpstart\\localpycs\\pyimod01_archive.pyc',
    'PYMODULE'),
   ('pyimod02_importers',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\build\\PyJumpStart\\localpycs\\pyimod02_importers.pyc',
+   'C:\\Users\\majones\\Documents\\Python_Projects\\PyJumpStart\\build\\pyjumpstart\\localpycs\\pyimod02_importers.pyc',
    'PYMODULE'),
   ('pyimod03_ctypes',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\build\\PyJumpStart\\localpycs\\pyimod03_ctypes.pyc',
+   'C:\\Users\\majones\\Documents\\Python_Projects\\PyJumpStart\\build\\pyjumpstart\\localpycs\\pyimod03_ctypes.pyc',
    'PYMODULE'),
   ('pyimod04_pywin32',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\build\\PyJumpStart\\localpycs\\pyimod04_pywin32.pyc',
+   'C:\\Users\\majones\\Documents\\Python_Projects\\PyJumpStart\\build\\pyjumpstart\\localpycs\\pyimod04_pywin32.pyc',
    'PYMODULE'),
   ('pyiboot01_bootstrap',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\venv\\Lib\\site-packages\\PyInstaller\\loader\\pyiboot01_bootstrap.py',
+   'C:\\Users\\majones\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\loader\\pyiboot01_bootstrap.py',
    'PYSOURCE'),
   ('pyi_rth_inspect',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_inspect.py',
+   'C:\\Users\\majones\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_inspect.py',
    'PYSOURCE'),
   ('pyi_rth_pkgutil',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_pkgutil.py',
+   'C:\\Users\\majones\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_pkgutil.py',
    'PYSOURCE'),
   ('pyi_rth_multiprocessing',
-   'C:\\Users\\Mauri\\Documents\\Python '
-   'Projects\\JumpStart\\venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_multiprocessing.py',
+   'C:\\Users\\majones\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_multiprocessing.py',
    'PYSOURCE'),
   ('PyJumpStart',
-   'C:\\Users\\Mauri\\Documents\\Python Projects\\JumpStart\\PyJumpStart.py',
+   'C:\\Users\\majones\\Documents\\Python_Projects\\PyJumpStart\\PyJumpStart.py',
    'PYSOURCE')],
- 'python314.dll',
+ 'python313.dll',
  True,
  False,
  False,
