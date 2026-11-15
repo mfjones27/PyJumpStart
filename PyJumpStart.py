@@ -49,11 +49,25 @@ def make_app(**kwargs) -> Application:
     kwargs.setdefault("output", _OUTPUT)
     return Application(**kwargs)
 
-DOCUMENTS_DIR = Path.home() / "Documents"
-PROJECTS_DIR = next(
-    (d for d in DOCUMENTS_DIR.iterdir() if d.is_dir() and "Python" in d.name),
-    DOCUMENTS_DIR,  # fallback if not found
-)
+def _find_documents_dir() -> Path:
+    # OneDrive often moves Documents to ~/OneDrive/Documents on Windows.
+    for candidate in (Path.home() / "Documents", Path.home() / "OneDrive" / "Documents"):
+        if candidate.is_dir():
+            return candidate
+    return Path.home() / "Documents"
+
+
+def _find_projects_dir(documents: Path) -> Path:
+    if not documents.is_dir():
+        return documents  # created on first use by get_projects()
+    return next(
+        (d for d in documents.iterdir() if d.is_dir() and "Python" in d.name),
+        documents,  # fallback if not found
+    )
+
+
+DOCUMENTS_DIR = _find_documents_dir()
+PROJECTS_DIR = _find_projects_dir(DOCUMENTS_DIR)
 HISTORY_FILE = Path.home() / ".pyjumpstart_history.json"
 
 STYLE = Style.from_dict({
@@ -96,16 +110,27 @@ def fuzzy_match(query: str, name: str) -> bool:
     return qi == len(query)
 
 
-def open_terminal(project_name: str) -> None:
+# New console window on Windows; harmless 0 elsewhere.
+_NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+
+
+def _launch_in_project(project_name: str, command: list[str]) -> None:
+    """Open a new console in the project folder.
+
+    The folder is passed as cwd instead of being pasted into a shell string, so a
+    folder name containing quotes, & or | can't break out into extra commands.
+    """
     path = PROJECTS_DIR / project_name
     save_history(project_name)
-    os.system(f'start cmd /K "cd /d {path}"')
+    subprocess.Popen(command, cwd=path, creationflags=_NEW_CONSOLE)
+
+
+def open_terminal(project_name: str) -> None:
+    _launch_in_project(project_name, ["cmd", "/K"])
 
 
 def open_cursor(project_name: str) -> None:
-    path = PROJECTS_DIR / project_name
-    save_history(project_name)
-    os.system(f'start cmd /K "cd /d {path} && cursor . 2>nul"')
+    _launch_in_project(project_name, ["cmd", "/K", "cursor . 2>nul"])
 
 
 def action_menu(project_name: str) -> None:
@@ -252,7 +277,8 @@ def clone_repo(url: str, use_gh: bool = False) -> tuple[bool, str]:
     dest = PROJECTS_DIR / repo_name
     if dest.exists():
         return False, f"Folder '{repo_name}' already exists"
-    cmd = ["gh", "repo", "clone", url, str(dest)] if use_gh else ["git", "clone", url, str(dest)]
+    # "--" stops a URL that starts with "-" from being read as a git option.
+    cmd = ["gh", "repo", "clone", url, str(dest)] if use_gh else ["git", "clone", "--", url, str(dest)]
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         return True, repo_name
